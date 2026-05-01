@@ -1,0 +1,241 @@
+ Reinforcement Learning for Adaptive Chess Puzzle
+               Training Curriculum
+                              KM Yashaswini          RV Pranav          R Abhinav      A Abhinav Reddy
+                          Department of Data Science and Artificial Intelligence (DSAI), IIIT Bangalore
+                                       BT2024224, BT2024221, BT2024239, BT2024236
+
+
+   Abstract—Effective chess training depends critically on the             Our system differs from Chess.com and Lichess along all
+selection of appropriately challenging puzzles. Existing platforms      three dimensions. First, the state vector tracks a separate skill
+such as Chess.com and Lichess rely on static, single-number             estimate per tactical theme, allowing the agent to identify and
+rating heuristics that treat all tactical themes uniformly and select
+each puzzle independently, with no strategic planning of the train-     target weak areas. Second, the agent plans over a full session
+ing sequence. We frame adaptive puzzle selection as a sequential        (100 puzzles) rather than making independent picks. Third, the
+decision problem and address it with Reinforcement Learning             continuous action space outputs a precise target rating δ ∗ ∈
+(RL). At each step the agent observes a learner’s per-theme skill       [400, 3000], which is matched to the nearest real puzzle in
+profile and selects a continuous target difficulty, from which a        the Lichess database via a KD-tree—preserving the full rating
+puzzle is retrieved via nearest-neighbour lookup. This preserves
+the full rating granularity of the 3.5-million-puzzle Lichess           resolution of the dataset rather than collapsing it into three
+dataset and avoids the information loss caused by coarse difficulty     coarse bins.
+binning. We model the interaction as a Markov Decision Process             Curriculum learning [2] provides the conceptual grounding:
+(MDP), simulate learner dynamics with a logistic success model,         the order and difficulty of training examples matters for
+and compare two RL algorithms—Proximal Policy Optimisation              learning speed. RL provides the optimisation framework: the
+(PPO) and Soft Actor-Critic (SAC)—against three baselines using
+a single consolidated performance metric, the Learning Efficiency       agent maximises cumulative long-term skill gain rather than
+Index (LEI). Robustness is assessed by evaluating trained policies      myopic per-puzzle appropriateness [3].
+on a held-out learner model that includes fatigue and altered              Future directions include: (i) replacing the logistic learner
+success-probability curvature, explicitly decoupling training from      model with a neural network fitted to real Lichess interaction
+evaluation.                                                             logs; (ii) incorporating session-length and fatigue variables
+                             I. I DEA                                   into the state; (iii) extending the framework to opening and
+                                                                        endgame study; and (iv) conducting user studies to measure
+   Chess puzzle training is one of the most effective methods           real-world learning gains against the platform baseline.
+for improving tactical skill. A puzzle presents a specific board
+position and requires the player to find the optimal sequence of                         II. DATASET D ESCRIPTION
+moves. Platforms such as Lichess and Chess.com host millions               We use the open-source Lichess Puzzle Database [4],
+of puzzles, each carrying a Glicko-2 rating, and serve them to          which contains over 3.5 million tactical puzzles extracted from
+users via a straightforward rating match: a player with rating r        real games. Relevant fields are shown in Table I.
+is given the next puzzle whose rating lies within ±∆ of r. After
+each attempt, both the player rating and the puzzle rating are                                        TABLE I
+updated using the same Glicko-2 formula [1].                                             L ICHESS P UZZLE DATASET F IELDS
+   While computationally efficient and fair at scale, this ap-             Field                 Description
+proach has three structural limitations.
+                                                                           PuzzleId              Unique alphanumeric identifier
+   1) Single-number skill model. One global rating conflates               FEN                   Board position (Forsyth-Edwards Notation)
+       performance across all tactical themes. A player who                Moves                 Optimal solution moves (UCI format)
+                                                                           Rating                Continuous Glicko-2 difficulty rating
+       excels at pins but struggles with endgame tactics receives          RatingDeviation       Uncertainty in the rating estimate
+       the same puzzle distribution as a player with the inverse           Themes                Space-separated tactical theme tags
+       profile.
+   2) Greedy, memoryless selection. Each puzzle is chosen
+       independently; the system has no concept of a training           A. Theme Categorisation
+       sequence. A sequence of puzzles can produce very                   Each puzzle is assigned to one primary tactical theme θ ∈
+       different long-term outcomes even if each individual             Θ:
+       puzzle seems appropriate.
+                                                                        Θ = {fork, pin, mate, endgame, skewer, discovery}
+   3) No strategic difficulty progression. The system never
+       deliberately pushes a learner into a harder zone to              The continuous rating δ ∈ [400, 3000] is not binned. At
+       maximise future growth; it only reacts to the most recent        inference time, the agent outputs a target rating δ ∗ and a theme
+       outcome.                                                         θ∗ ; the environment retrieves the puzzle in C(θ∗ ) closest to δ ∗
+using a pre-built KD-tree index, giving |Θ|=6 independent          where α is the learning rate, λ>0 scales reward for solving
+KD-trees.                                                          harder puzzles relative to current skill, and µ>0 is a fixed
+                                                                   penalty for failure. Note that when δ < ϕ (too-easy puzzle)
+                       III. MDP F ORMULATION
+                                                                   the gain (δ − ϕ)/ϕ < 0 makes the correct branch produce
+ We model adaptive puzzle selection as a finite-horizon            negligible or slightly negative gain, naturally discouraging
+MDP:                                                               trivially easy selections. The overall rating is updated as:
+              M = ⟨S, A, P, R, γ⟩
+                                                                                                      |Θ|
+A. State Space                                                                                  1 X (k)
+                                                                                        ρt+1 =     ϕt+1
+  The state st ∈ S ⊂ R|Θ|+3 encodes the learner’s current                                      |Θ|
+                                                                                                      k=1
+skill profile:
+                   
+                          (1)          (|Θ|)
+                                                                  E. Reward Function
+               st = ρt , ϕt , . . . , ϕt , p̄t , δ̄t
+                                                                     The immediate reward is the change in overall skill:
+where:
+  • ρt ∈ [400, 3000] is the learner’s overall rating,                                      rt = ρt+1 − ρt                       (5)
+       (k)
+  • ϕt     ∈ [400, 3000] is the skill for theme k,
+  • p̄t ∈ [0, 1] is the rolling success rate over the last W =10   This prevents the two degenerate policies: selecting only easy
+     puzzles,                                                      puzzles yields near-zero gain from Eq. (4); selecting only
+  • δ̄t ∈ [400, 3000] is the mean difficulty of the last W         impossible puzzles yields repeated −µ penalties. The optimal
+     puzzles.                                                      policy must balance challenge and attainability. The agent
+All components are normalised to [0, 1] before being fed to        maximises:
+the policy network.                                                                            T
+                                                                                               X −t
+                                                                                         Gt =       γ k rt+k
+B. Action Space                                                                                 k=0
+  The action at ∈ A is continuous:
+                                                                                   IV. E NVIRONMENT D ESIGN
+  at = (θt∗ , δt∗ ),      θt∗ ∈ {1, . . . , |Θ|},
+                                            δt∗ ∈ [400, 3000]
+                                                            (1)       The simulation environment follows the Gymnasium inter-
+The theme component is treated as a discrete head and              face [6]. Algorithm 1 describes one step.
+the difficulty component as a continuous Gaussian head in
+the PPO/SAC policy network. This preserves the full rating       Algorithm 1 Environment step(at )
+granularity of the dataset; the coarse three-bin discretisation  Require: action at = (θt∗ , δt∗ )
+used in earlier designs is discarded.                              1: Query KD-tree for theme θt∗ ; retrieve puzzle p nearest to
+C. Solve Probability                                                  δt∗
+                                                                   2: Extract actual puzzle rating δ ← p.Rating
+   Whether a learner solves a retrieved puzzle is modelled as      3: Compute Psolve via Eq. (2)
+a Bernoulli trial. The success probability follows the logistic    4: Sample Xt ∼ Bernoulli(Psolve )
+(Item Response Theory) model [5]:                                               (θt∗ )
+                                      !                            5: Update ϕt+1      via Eqs. (3), (4)
+                              (θ)
+  
+            (θ)
+                           ϕ t   − δ                 1            6: Update  ρ t+1  ,  p̄t+1 , δ̄t+1
+P solve | ϕt , δ = σ                     =               (θ)
+                                                               ! 7: Compute r via Eq. (5); construct s
+                                τ                       ϕ −δ                      t                        t+1
+                                            1 + exp − t            8: return st+1 , rt , done, {}
+                                                           τ
+                                                             (2)
+where δ is the retrieved puzzle’s rating and τ >0 is                An episode ends after T =100 puzzle attempts. reset()
+a temperature parameter. Success is sampled as Xt ∼              samples  a new initial skill vector from N (µ0 1, σ02 I), enabling
+Bernoulli(P (solve)).                                            training across a diverse simulated population.
+                                                                    Evaluation environment: To decouple training from eval-
+D. Learner Skill Update
+                                                                 uation and test policy robustness [10], a separate held-out
+   After each attempt the theme-specific skill is updated by:    evaluation environment is used. It introduces two perturbations
+                (θ)     (θ)
+                                      
+                                            (θ)
+                                                                invisible to the policy during training: (i) a fatigue scalar
+              ϕt+1 = ϕt + α · ∆ δ, ϕt , Xt                   (3)
+                                                                 f (t) = 1 − β(t/T ) that reduces effective skill as the session
+The learning gain ∆ is defined piecewise:                        progresses, and (ii) a modified temperature τ ′ = τ + N (0, στ2 )
+                                                                that alters the success-probability curvature. A policy that
+                      λ · δ − ϕ if Xt = 1 (solved)
+                                                                collapses under these perturbations has overfit to the training
+       ∆(δ, ϕ, Xt ) =            ϕ                           (4) mechanics rather than discovered a genuinely robust curricu-
+                      −µ                                        lum.
+                      
+                                        if Xt = 0 (failed)
+                      V. RL A LGORITHMS                                  •  T = 100 is episode length (normalises for episode
+   Because the action space is continuous (Eq. (1)), we restrict            duration),
+                                                                         • p̄ is the mean success rate (penalises frustrating policies
+to two policy-gradient methods that handle continuous actions
+natively. Tabular Q-Learning and standard DQN are not used:                 that keep failing the learner),
+                                                                                   ∗
+                                                                         • Var(δ0:T ) is the variance of selected difficulties (pe-
+DQN is designed for discrete action spaces and would require
+significant architectural changes (e.g., DDPG-style modifica-               nalises erratic selection),
+                                                                              2
+                                                                         • σref is a reference variance constant.
+tions) that are outside the scope of this project.
+                                                                       LEI captures the three desiderata simultaneously: a good
+A. Proximal Policy Optimisation (PPO)                                  policy must improve skill, maintain a learner-appropriate suc-
+   PPO [7] is an on-policy actor-critic algorithm that stabilises      cess rate, and produce a coherent difficulty progression. A
+updates via a clipped probability-ratio objective. Let rt (ξ) =        policy that maximises only ∆ρ by recklessly selecting near-
+πξ (at |st ) / πξold (at |st ) denote the importance-sampling ratio.   impossible puzzles will be penalised by low p̄.
+The clipped surrogate loss is:
+                                                                       B. Diagnostic Metrics
+                  h                                     i               The following secondary metrics are reported per-algorithm
+  LPPO (ξ) = Êt min rt (ξ) Ât , clip rt (ξ), 1−ε, 1+ε Ât            to diagnose how each policy achieves (or fails to achieve) its
+                                                             (6)       LEI score:
+   where Ât is the generalised advantage estimate [8] and ε is           • Skill improvement ∆ρ = ρT − ρ0 : raw measure of
+the clip ratio. The policy network has two output heads: a soft-            learning outcome.
+max head over |Θ| themes and a Gaussian head (mean µδ , log-              • Per-theme skill gain ∆ϕ
+                                                                                                       (k)     (k)    (k)
+                                                                                                           = ϕT − ϕ0 for each k:
+std log σδ ) over δ ∗ . Actions are sampled as δ ∗ ∼ N (µδ , σδ2 )          reveals whether the agent corrects theme-specific weak-
+clipped to [400, 3000].                                                     nesses.
+B. Soft Actor-Critic (SAC)                                                • Success rate trajectory p̄t over t: tracks difficulty cali-
+                                                                            bration across the session.
+  SAC [9] is an off-policy maximum-entropy actor-critic that                                           ∗
+                                                                          • Difficulty progression δt over t: reveals the learned
+augments the reward with an entropy bonus:
+                         X                                                  curriculum structure.
+         π ∗ = arg max      E[rt + αH H(π(·|st ))]       (7)              • Robustness score: LEI on the held-out evaluation en-
+                        π
+                             t                                              vironment divided by LEI on the training environment;
+where αH is an automatically tuned temperature coefficient                  values close to 1 indicate a robust, non-overfit policy.
+and H denotes entropy. SAC maintains an experience replay                               VIII. E XPECTED O UTCOMES
+buffer for sample efficiency and two soft Q-functions to
+                                                                         We expect the following outcomes.
+mitigate overestimation bias. Its off-policy nature makes it sig-
+nificantly more sample-efficient than PPO, which is valuable             1) RL outperforms all baselines on LEI. The rating-
+when simulated episodes are expensive.                                      match baseline is expected to perform well on ∆ρ
+                                                                            alone but poorly on LEI because it ignores theme-
+                   VI. BASELINE M ETHODS                                    specific weaknesses and produces no coherent difficulty
+  Three baselines bracket the expected performance range.                   progression.
+                               ∗
+  • Random: selects θ and δ uniformly at random; serves
+                                                                         2) SAC ≥ PPO on LEI in the training environment.
+    as a naive lower bound.                                                 SAC’s experience replay makes it more sample-efficient,
+  • Rating      match      (platform     baseline):     always              and its entropy bonus encourages exploration of the
+    retrieves a puzzle with |δ − ρt | ≤ 100, mimicking                      continuous difficulty axis.
+    Chess.com/Lichess; theme is chosen uniformly.                        3) PPO ≥ SAC on robustness score. On-policy algorithms
+                                    ∗
+  • Fixed progression: increases δ by a constant ∆δ every
+                                                                            are generally less prone to overfitting to the simulator
+    k steps, regardless of performance; illustrates the cost of             dynamics because they do not repeatedly replay the same
+    ignoring feedback.                                                      transitions.
+                                                                         4) Theme specialisation. Both RL agents will allocate
+                                                                                                             (k)
+                 VII. E VALUATION M ETRICS                                  more steps to themes where ϕt < ρt , demonstrating
+A. Consolidated Metric: Learning Efficiency Index                           personalised adaptation beyond a uniform curriculum.
+                                                                         5) Continuous action advantage. Compared to a discrete-
+  To enable a single, fair comparison between algorithms, we
+                                                                            bin variant (ablation), the continuous action space will
+define the Learning Efficiency Index (LEI):
+                                                                            achieve a higher LEI because it can fine-tune difficulty
+                      ∆ρ                1                                   near the learner’s precise skill boundary.
+              LEI =      · p̄ ·          ∗ )/σ 2                (8)
+                      T         1 + Var(δ0:T  ref
+                                                                                                 R EFERENCES
+where:
+                                                                        [1] M. E. Glickman, “The Glicko system,” Boston University Technical
+  • ∆ρ = ρT − ρ0 is overall skill improvement,                              Report, 1995.
+ [2] Y. Bengio, J. Louradour, R. Collobert, and J. Weston, “Curriculum
+     learning,” in Proc. 26th Int. Conf. Machine Learning (ICML), Montreal,
+     2009, pp. 41–48.
+ [3] R. S. Sutton and A. G. Barto, Reinforcement Learning: An Introduction,
+     2nd ed. Cambridge, MA: MIT Press, 2018.
+ [4] Lichess.org, “Lichess open puzzle database,” 2023. [Online]. Available:
+     https://database.lichess.org/#puzzles
+ [5] F. M. Lord, Applications of Item Response Theory to Practical Testing
+     Problems. Hillsdale, NJ: Erlbaum, 1980.
+ [6] G. Brockman et al., “OpenAI Gym,” arXiv preprint arXiv:1606.01540,
+     2016.
+ [7] J. Schulman, F. Wolski, P. Dhariwal, A. Radford, and O. Klimov, “Prox-
+     imal policy optimization algorithms,” arXiv preprint arXiv:1707.06347,
+     2017.
+ [8] J. Schulman, P. Moritz, S. Levine, M. Jordan, and P. Abbeel, “High-
+     dimensional continuous control using generalized advantage estimation,”
+     in Proc. Int. Conf. Learning Representations (ICLR), 2016.
+ [9] T. Haarnoja, A. Zhou, P. Abbeel, and S. Levine, “Soft actor-critic: Off-
+     policy maximum entropy deep reinforcement learning with a stochastic
+     actor,” in Proc. 35th Int. Conf. Machine Learning (ICML), 2018,
+     pp. 1861–1870.
+[10] R. Kirk, A. Zhang, E. Grefenstette, and T. Rocktäschel, “A survey of
+     zero-shot generalisation in deep reinforcement learning,” J. Artificial
+     Intelligence Research, vol. 76, pp. 201–264, 2023.
+[11] A. Raffin, A. Hill, A. Gleave, A. Kanervisto, M. Ernestus, and N. Dor-
+     mann, “Stable-Baselines3: Reliable reinforcement learning implementa-
+     tions,” J. Machine Learning Research, vol. 22, no. 268, pp. 1–8, 2021.
+
