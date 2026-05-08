@@ -19,10 +19,15 @@ Flow:
 """
 
 import argparse
+import importlib.util
 import logging
 import random
 import sys
 from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
 
 import numpy as np
 import torch
@@ -45,6 +50,14 @@ logging.basicConfig(
 log = logging.getLogger(__name__)
 
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+
+def progress_bar_available() -> bool:
+    """Return whether Stable-Baselines3 progress bar extras are installed."""
+    return (
+        importlib.util.find_spec("tqdm") is not None
+        and importlib.util.find_spec("rich") is not None
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -128,6 +141,23 @@ def make_eval_env(seed: int, indices_dir: str = "data/indices") -> ChessPuzzleEn
     return EvalChessPuzzleEnv(indices_dir=indices_dir, seed=seed + 999)
 
 
+def make_callback_eval_env(seed: int, indices_dir: str = "data/indices") -> VecNormalize:
+    """Create the normalized eval env used by Stable-Baselines3 callbacks."""
+    eval_env = DummyVecEnv(
+        [lambda: Monitor(ChessPuzzleEnv(indices_dir=indices_dir, seed=seed + 1))]
+    )
+    eval_env = VecNormalize(
+        eval_env,
+        norm_obs=True,
+        norm_reward=True,
+        clip_obs=10.0,
+        clip_reward=10.0,
+    )
+    eval_env.training = False
+    eval_env.norm_reward = False
+    return eval_env
+
+
 # ---------------------------------------------------------------------------
 # Main training entry point
 # ---------------------------------------------------------------------------
@@ -155,10 +185,8 @@ def train(
     # --- Environments ---
     log.info("Building environments …")
     train_env = make_train_env(seed, indices_dir)
-    # A separate VecEnv is used inside EvalCallback to avoid contaminating stats
-    eval_vec_env_for_callback = DummyVecEnv(
-        [lambda: Monitor(ChessPuzzleEnv(indices_dir=indices_dir, seed=seed + 1))]
-    )
+    # Keep the callback eval env wrapped like train_env so VecNormalize stats sync cleanly.
+    eval_vec_env_for_callback = make_callback_eval_env(seed, indices_dir)
 
     # --- Model ---
     log.info("Building PPO model with HybridPolicy …")
@@ -198,11 +226,14 @@ def train(
     )
 
     # --- Training ---
+    use_progress_bar = progress_bar_available()
+    if not use_progress_bar:
+        log.info("Progress bar disabled because optional package 'rich' is not installed.")
     log.info("Starting PPO training for %d timesteps …", total_timesteps)
     model.learn(
         total_timesteps=total_timesteps,
         callback=[checkpoint_cb, eval_cb],
-        progress_bar=True,
+        progress_bar=use_progress_bar,
     )
 
     # --- Save final model ---

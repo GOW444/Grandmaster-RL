@@ -1,7 +1,7 @@
 """
 SAC Training Script
 ===================
-Trains a SAC agent with the HybridPolicy on the ChessPuzzleEnv.
+Trains a SAC agent with SB3's continuous MlpPolicy on the ChessPuzzleEnv.
 
 Usage:
     python training/train_sac.py [--config ...] [--timesteps ...] [--seed ...] [--output_dir ...]
@@ -17,9 +17,9 @@ rounded to an integer at environment step time. This means:
      practice, since the rounding introduces only a small quantization
      error and N_THEMES is small, training still converges.
 
-  2. The theme head in HybridPolicy outputs a Categorical distribution,
-     but SAC's policy gradient relies on the reparameterization trick.
-     Categoricals are not reparameterizable via the standard trick.
+  2. Unlike PPO, this script uses SB3's standard continuous SAC policy.
+     The policy outputs a continuous theme value, and the environment rounds
+     it to the nearest valid theme.
 
   TODO: For a rigorous implementation, replace the Categorical theme head
         with Gumbel-Softmax reparameterization (temperature annealed from
@@ -38,10 +38,15 @@ PPO is the primary recommended algorithm for this environment.
 """
 
 import argparse
+import importlib.util
 import logging
 import random
 import sys
 from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
 
 import numpy as np
 import torch
@@ -54,7 +59,6 @@ from stable_baselines3.common.vec_env import DummyVecEnv
 from env.chess_env import ChessPuzzleEnv
 from env.eval_env import EvalChessPuzzleEnv
 from evaluation.evaluate import evaluate_agent
-from networks.hybrid_policy import HybridPolicy
 
 logging.basicConfig(
     level=logging.INFO,
@@ -64,6 +68,14 @@ logging.basicConfig(
 log = logging.getLogger(__name__)
 
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+
+def progress_bar_available() -> bool:
+    """Return whether Stable-Baselines3 progress bar extras are installed."""
+    return (
+        importlib.util.find_spec("tqdm") is not None
+        and importlib.util.find_spec("rich") is not None
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -134,10 +146,10 @@ def train(
     )
 
     # --- Model ---
-    log.info("Building SAC model with HybridPolicy …")
+    log.info("Building SAC model with MlpPolicy …")
     ent_coef = cfg.get("ent_coef", "auto")
     model = SAC(
-        policy=HybridPolicy,
+        policy="MlpPolicy",
         env=train_env,
         learning_rate=cfg.get("learning_rate", 3e-4),
         buffer_size=cfg.get("buffer_size", 100_000),
@@ -163,11 +175,14 @@ def train(
     )
 
     # --- Training ---
+    use_progress_bar = progress_bar_available()
+    if not use_progress_bar:
+        log.info("Progress bar disabled because optional package 'rich' is not installed.")
     log.info("Starting SAC training for %d timesteps …", total_timesteps)
     model.learn(
         total_timesteps=total_timesteps,
         callback=[checkpoint_cb],
-        progress_bar=True,
+        progress_bar=use_progress_bar,
     )
 
     # --- Save final model ---
