@@ -125,6 +125,7 @@ class ChessPuzzleEnv(gym.Env):
         # Load KD-tree indices
         self._trees: list[KDTree] = []
         self._dfs: list[Any] = []  # list of pd.DataFrame
+        self._valid_theme_indices: list[int] = []
         self._load_indices()
 
         # Internal state (initialized properly in reset())
@@ -154,7 +155,19 @@ class ChessPuzzleEnv(gym.Env):
                 tree, df = pickle.load(fh)
             self._trees.append(tree)
             self._dfs.append(df)
+            if len(df) > 0:
+                self._valid_theme_indices.append(len(self._dfs) - 1)
+            else:
+                log.warning("Theme '%s' has no puzzles; selections will be remapped.", theme)
+        if not self._valid_theme_indices:
+            raise ValueError(f"No puzzles found in any KD-tree index under {self._indices_dir}")
         log.debug("Loaded %d KD-tree indices.", len(THEMES))
+
+    def _resolve_theme_idx(self, theme_idx: int) -> int:
+        """Return a populated theme index nearest to ``theme_idx``."""
+        if len(self._dfs[theme_idx]) > 0:
+            return theme_idx
+        return min(self._valid_theme_indices, key=lambda idx: abs(idx - theme_idx))
 
     def _build_state(self) -> np.ndarray:
         """Construct and return the normalized (9,) state vector."""
@@ -191,8 +204,9 @@ class ChessPuzzleEnv(gym.Env):
         tree = self._trees[theme_idx]
         df = self._dfs[theme_idx]
         _, idx = tree.query([[target_rating]])
-        row = df.iloc[int(idx)]
-        return float(row["Rating"]), int(idx)
+        row_idx = int(np.asarray(idx).ravel()[0])
+        row = df.iloc[row_idx]
+        return float(row["Rating"]), row_idx
 
     # ------------------------------------------------------------------
     # Gymnasium interface
@@ -247,7 +261,8 @@ class ChessPuzzleEnv(gym.Env):
             Tuple of ``(obs, reward, terminated, truncated, info)``.
         """
         # --- Decode action ---
-        theme_idx = int(np.clip(round(float(action[0])), 0, len(THEMES) - 1))
+        requested_theme_idx = int(np.clip(round(float(action[0])), 0, len(THEMES) - 1))
+        theme_idx = self._resolve_theme_idx(requested_theme_idx)
         norm_diff = float(np.clip(action[1], 0.0, 1.0))
         target_rating = _denormalize_rating(norm_diff)
 
@@ -290,6 +305,8 @@ class ChessPuzzleEnv(gym.Env):
         info: dict[str, Any] = {
             "theme_idx": theme_idx,
             "theme_name": THEMES[theme_idx],
+            "requested_theme_idx": requested_theme_idx,
+            "requested_theme_name": THEMES[requested_theme_idx],
             "puzzle_rating": puzzle_rating,
             "target_rating": target_rating,
             "solved": solved,

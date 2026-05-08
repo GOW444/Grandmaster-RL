@@ -23,6 +23,9 @@ from tqdm import tqdm
 # Configuration
 # ---------------------------------------------------------------------------
 THEMES: list[str] = ["fork", "pin", "mate", "endgame", "skewer", "discovery"]
+THEME_TAG_ALIASES: dict[str, set[str]] = {
+    "discovery": {"discoveredAttack", "discoveredCheck"},
+}
 RATING_MIN: int = 400
 RATING_MAX: int = 3000
 MAX_RATING_DEVIATION: int = 150
@@ -52,7 +55,8 @@ def _assign_primary_theme(themes_str: str) -> str | None:
         return None
     tags = set(themes_str.split())
     for theme in THEMES:
-        if theme in tags:
+        theme_tags = {theme} | THEME_TAG_ALIASES.get(theme, set())
+        if tags & theme_tags:
             return theme
     return None
 

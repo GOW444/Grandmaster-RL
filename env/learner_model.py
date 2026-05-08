@@ -60,13 +60,12 @@ def update_skill(
 ) -> float:
     """Apply the piecewise skill update rule after a puzzle attempt.
 
-    On success the gain is proportional to how much harder the puzzle was
-    relative to the learner's current skill (negative if the puzzle was too
-    easy, naturally discouraging trivially easy selections).
-    On failure a fixed penalty ``-mu`` is applied.
+    On success the learner receives a small base gain plus extra credit for
+    solving puzzles above their current skill. On failure a fixed penalty
+    ``-mu`` is applied.
 
     Update rule:
-        if solved:  gain = λ * (δ - φ) / φ
+        if solved:  gain = 2μ + λ * max(δ - φ, 0)
         else:       gain = -μ
         φ_new = φ + α * gain
         φ_new = clamp(φ_new, RATING_MIN, RATING_MAX)
@@ -83,7 +82,7 @@ def update_skill(
         Updated skill estimate clamped to [RATING_MIN, RATING_MAX].
     """
     if solved:
-        gain = lam * (delta - phi) / max(phi, 1.0)  # guard against division by ~0
+        gain = (2.0 * mu) + lam * max(delta - phi, 0.0)
     else:
         gain = -mu
 
