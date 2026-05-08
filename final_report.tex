@@ -1,0 +1,325 @@
+\documentclass[11pt,a4paper]{article}
+
+\usepackage[margin=1in]{geometry}
+\usepackage{booktabs}
+\usepackage{amsmath}
+\usepackage{graphicx}
+\usepackage{hyperref}
+\usepackage{xcolor}
+\usepackage{enumitem}
+\usepackage{array}
+
+\hypersetup{
+    colorlinks=true,
+    linkcolor=blue,
+    urlcolor=blue,
+    citecolor=blue
+}
+
+\title{\textbf{Grandmaster-RL: Adaptive Chess Puzzle Curriculum Learning}}
+\author{DSAI Project -- IIIT Bangalore}
+\date{}
+
+\begin{document}
+
+\maketitle
+
+\begin{abstract}
+Grandmaster-RL is a reinforcement learning based adaptive chess puzzle training system.
+The system models chess puzzle recommendation as a sequential decision-making problem:
+at each step, an agent selects a tactical theme and target puzzle difficulty for a
+simulated learner. The environment retrieves real Lichess puzzles through per-theme
+KD-tree indices and simulates solve outcomes using an Item Response Theory inspired
+learner model. We compare Proximal Policy Optimization (PPO), Soft Actor-Critic (SAC),
+and three heuristic baselines. PPO achieves the strongest overall learning efficiency,
+with high solve rates and robust transfer to a held-out evaluation environment.
+\end{abstract}
+
+\section{Introduction}
+
+Chess puzzle platforms commonly use rating-matching heuristics: a learner is given
+puzzles near their current estimated rating. While this is simple and effective, it
+does not explicitly optimize long-term skill development across tactical themes.
+Grandmaster-RL instead treats adaptive puzzle selection as a Markov Decision Process
+(MDP), where the agent learns to select curricula that maximize simulated learner
+improvement over an episode.
+
+The agent chooses both a tactical theme and a target difficulty. The environment then
+retrieves the nearest real puzzle from a preprocessed Lichess puzzle dataset and
+updates the learner's simulated skill based on whether the puzzle is solved. The final
+goal is not merely high success rate, but efficient learning: rating gain achieved
+through appropriately challenging and stable puzzle selection.
+
+\section{Dataset and Preprocessing}
+
+The project uses a reduced Lichess puzzle dataset. The preprocessing pipeline applies
+the following steps:
+
+\begin{enumerate}[leftmargin=*]
+    \item Keep puzzles with rating deviation at most 150.
+    \item Keep puzzles with ratings in the range $[400, 3000]$.
+    \item Assign each puzzle to one primary tactical theme.
+    \item Save one processed CSV per theme.
+    \item Build a one-dimensional KD-tree per theme using puzzle rating as the search coordinate.
+\end{enumerate}
+
+One implementation issue was corrected during development. The internal theme name
+\texttt{discovery} does not appear literally in the Lichess tags. Instead, Lichess
+uses tags such as \texttt{discoveredAttack} and \texttt{discoveredCheck}. These tags
+were mapped into the internal \texttt{discovery} category, producing a non-empty
+discovery index.
+
+\begin{table}[h]
+\centering
+\caption{Final per-theme puzzle counts after preprocessing.}
+\begin{tabular}{lr}
+\toprule
+\textbf{Theme} & \textbf{Puzzle Count} \\
+\midrule
+Fork & 743,786 \\
+Pin & 325,478 \\
+Mate & 1,685,685 \\
+Endgame & 1,576,401 \\
+Skewer & 28,223 \\
+Discovery & 162,344 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\section{Environment Design}
+
+The training environment is implemented as a Gymnasium environment. Each episode
+contains 100 puzzle attempts. The observation vector contains:
+
+\[
+s_t =
+\left[
+\rho,\,
+\phi_{\text{fork}},\,
+\phi_{\text{pin}},\,
+\phi_{\text{mate}},\,
+\phi_{\text{endgame}},\,
+\phi_{\text{skewer}},\,
+\phi_{\text{discovery}},\,
+\bar{p},\,
+\bar{\delta}
+\right],
+\]
+
+where $\rho$ is the overall learner rating, $\phi$ values are per-theme skill
+estimates, $\bar{p}$ is rolling success rate, and $\bar{\delta}$ is rolling mean
+difficulty. All observation values are normalized to $[0,1]$.
+
+The action is a two-dimensional continuous vector:
+
+\[
+a_t = [k, d],
+\]
+
+where $k$ is a theme value rounded to the nearest valid theme index and $d$ is a
+normalized target difficulty. The target difficulty is denormalized to the rating
+range $[400, 3000]$, and the nearest real puzzle rating is retrieved from the
+corresponding KD-tree.
+
+\subsection{Learner Model}
+
+The probability of solving a puzzle follows a logistic Item Response Theory style
+model:
+
+\[
+P(\text{solve}) = \sigma\left(\frac{\phi_k - \delta}{\tau}\right),
+\]
+
+where $\phi_k$ is the learner's skill for the chosen theme, $\delta$ is the puzzle
+rating, and $\tau$ controls the sharpness of the response curve.
+
+After each attempt, the learner's skill is updated. Successful solves give a base
+gain plus extra credit for solving puzzles above the learner's current skill, while
+failures apply a fixed penalty:
+
+\[
+\text{gain} =
+\begin{cases}
+2\mu + \lambda \max(\delta - \phi, 0), & \text{if solved}, \\
+-\mu, & \text{otherwise}.
+\end{cases}
+\]
+
+\[
+\phi_{\text{new}} = \text{clip}(\phi + \alpha \cdot \text{gain}, 400, 3000).
+\]
+
+\section{Algorithms}
+
+\subsection{PPO}
+
+PPO is the primary algorithm. It uses a custom hybrid actor-critic policy with:
+
+\begin{itemize}[leftmargin=*]
+    \item a categorical head for tactical theme selection,
+    \item a Gaussian head for target difficulty,
+    \item a shared MLP feature trunk,
+    \item a value head for critic estimation.
+\end{itemize}
+
+PPO is well suited to the mixed discrete-continuous nature of the task because the
+custom policy can explicitly model theme selection and difficulty selection separately.
+
+\subsection{SAC}
+
+SAC is included as a comparison model. Stable-Baselines3 SAC expects a fully continuous
+policy, so the SAC trainer uses the standard \texttt{MlpPolicy}. This is compatible
+with the environment because the action space is represented as a continuous
+\texttt{Box}: the theme component is a float rounded inside the environment, and the
+difficulty component is continuous. SAC is therefore useful as an aggressive
+continuous-control comparison, though it is less semantically exact than PPO for theme
+selection.
+
+\section{Baselines}
+
+Three non-RL baselines were used:
+
+\begin{itemize}[leftmargin=*]
+    \item \textbf{RandomAgent}: randomly selects theme and difficulty.
+    \item \textbf{RatingMatchAgent}: selects difficulty near the learner's current rating.
+    \item \textbf{FixedProgressionAgent}: starts with easier puzzles and increases difficulty on a fixed schedule.
+\end{itemize}
+
+These baselines are important because rating matching is already a strong practical
+heuristic in puzzle recommendation systems.
+
+\section{Evaluation Metrics}
+
+The main metric is the Learning Efficiency Index (LEI):
+
+\[
+\text{LEI}
+= \frac{\Delta \rho}{T}
+\cdot \bar{p}
+\cdot
+\frac{1}{1 + \frac{\text{Var}(\delta)}{\sigma^2_{\text{ref}}}},
+\]
+
+where $\Delta \rho$ is total rating gain, $T$ is episode length, $\bar{p}$ is mean
+success rate, and the final term rewards difficulty consistency.
+
+We also report:
+
+\begin{itemize}[leftmargin=*]
+    \item mean rating change, $\Delta \rho$,
+    \item mean success rate,
+    \item robustness, computed as evaluation LEI divided by training LEI.
+\end{itemize}
+
+The evaluation environment adds unseen learner fatigue and response-temperature jitter.
+This tests whether policies transfer beyond the exact training dynamics.
+
+\section{Results}
+
+\begin{table}[h]
+\centering
+\caption{Final comparison of RL agents and baselines.}
+\resizebox{\textwidth}{!}{
+\begin{tabular}{lrrrrrrr}
+\toprule
+\textbf{Agent} &
+\textbf{LEI Train} &
+\textbf{LEI Eval} &
+\textbf{Robustness} &
+\textbf{$\Delta \rho$ Train} &
+\textbf{$\Delta \rho$ Eval} &
+\textbf{Success Train} &
+\textbf{Success Eval} \\
+\midrule
+PPO & 0.0024 & 0.0016 & 0.6674 & 6.38 & 4.63 & 0.754 & 0.697 \\
+SAC & 0.0012 & 0.0005 & 0.4077 & 16.65 & 11.34 & 0.190 & 0.133 \\
+Random & 0.0000 & 0.0000 & 0.6413 & 3.94 & 2.57 & 0.234 & 0.233 \\
+RatingMatch & 0.0018 & 0.0012 & 0.6667 & 8.56 & 6.48 & 0.485 & 0.419 \\
+FixedProgression & 0.0019 & 0.0013 & 0.7149 & 7.19 & 5.57 & 0.582 & 0.536 \\
+\bottomrule
+\end{tabular}
+}
+\end{table}
+
+\section{Discussion}
+
+PPO is the strongest overall policy according to the primary metric. It obtains the
+highest evaluation LEI while maintaining a high success rate of 69.7\% in the held-out
+evaluation environment. This indicates that PPO learns a curriculum that is both
+challenging and consistently solvable.
+
+SAC produces the largest raw rating gains, with an evaluation $\Delta \rho$ of 11.34.
+However, its success rate is much lower: 19.0\% during training evaluation and 13.3\%
+in the held-out environment. This suggests that SAC learns a more aggressive strategy,
+selecting harder puzzles that produce large gains when solved but many failures overall.
+Its lower robustness score also suggests weaker transfer to unseen learner dynamics.
+
+The heuristic baselines are competitive. RatingMatch and FixedProgression both achieve
+positive evaluation LEI, confirming that simple curriculum strategies are strong in this
+domain. PPO still outperforms both on evaluation LEI, supporting the value of RL-based
+curriculum optimization.
+
+FixedProgression has the highest robustness score, but its evaluation LEI is below PPO.
+This means it transfers consistently, but does not optimize learning efficiency as well
+as the PPO policy.
+
+\section{Implementation Fixes}
+
+Several important issues were found and fixed during development:
+
+\begin{itemize}[leftmargin=*]
+    \item Corrected SciPy KD-tree query index extraction.
+    \item Fixed empty \texttt{discovery.pkl} by mapping \texttt{discoveredAttack} and \texttt{discoveredCheck}.
+    \item Added repository-root bootstrapping so training scripts run correctly as files.
+    \item Disabled Stable-Baselines3 progress bars automatically when optional \texttt{rich} dependency is missing.
+    \item Wrapped PPO callback evaluation environments with \texttt{VecNormalize}.
+    \item Switched SAC from incompatible \texttt{HybridPolicy} to SB3's continuous \texttt{MlpPolicy}.
+    \item Rebalanced the learner skill update so successful solves produce meaningful positive learning signal.
+\end{itemize}
+
+\section{Conclusion}
+
+Grandmaster-RL successfully implements an adaptive chess puzzle curriculum system using
+real puzzle metadata, simulated learner dynamics, and reinforcement learning. PPO is
+the recommended final policy because it provides the best balance of learning
+efficiency, success rate, rating improvement, and robustness. SAC is useful as an
+aggressive high-gain comparison, while the heuristic baselines provide strong reference
+points for practical curriculum design.
+
+\section{Future Work}
+
+Future improvements include implementing a true hybrid SAC policy with Gumbel-Softmax
+theme selection, evaluating on more diverse learner profiles, adding richer theme
+taxonomy, and validating the learned curricula with human users or historical learner
+data.
+
+\begin{thebibliography}{9}
+
+\bibitem{glicko}
+M. E. Glickman.
+\textit{The Glicko System}.
+Boston University, 1995.
+
+\bibitem{lichess}
+Lichess.
+\textit{Lichess Open Puzzle Database}.
+\url{https://database.lichess.org/#puzzles}
+
+\bibitem{ppo}
+J. Schulman, F. Wolski, P. Dhariwal, A. Radford, and O. Klimov.
+\textit{Proximal Policy Optimization Algorithms}.
+arXiv:1707.06347, 2017.
+
+\bibitem{sac}
+T. Haarnoja, A. Zhou, P. Abbeel, and S. Levine.
+\textit{Soft Actor-Critic: Off-Policy Maximum Entropy Deep Reinforcement Learning with a Stochastic Actor}.
+ICML, 2018.
+
+\bibitem{gumbel}
+E. Jang, S. Gu, and B. Poole.
+\textit{Categorical Reparameterization with Gumbel-Softmax}.
+ICLR, 2017.
+
+\end{thebibliography}
+
+\end{document}
