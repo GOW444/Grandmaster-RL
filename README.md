@@ -20,6 +20,9 @@ Grandmaster-RL/
 │   ├── chess_env.py        # Training Gymnasium environment
 │   ├── eval_env.py         # Held-out eval env (fatigue + jitter)
 │   └── learner_model.py    # IRT logistic model + skill update
+├── gui/
+│   ├── app.py              # Streamlit Interactive Dashboard
+│ 
 ├── agents/
 │   └── baselines.py        # Random, RatingMatch, FixedProgression
 ├── networks/
@@ -27,16 +30,12 @@ Grandmaster-RL/
 ├── training/
 │   ├── train_ppo.py
 │   ├── train_sac.py
-│   └── configs/
-│       ├── ppo.yaml
-│       └── sac.yaml
+│   └── configs/            # YAML hyperparameter configurations
 ├── evaluation/
 │   ├── evaluate.py         # LEI, robustness, and multi-agent comparison
 │   └── visualize.py        # All 6 publication plots
 ├── scripts/
 │   └── build_dataset.py    # Phase 1: filter CSV + build KD-tree indices
-├── tests/
-│   └── test_env.py         # Pytest sanity checks
 ├── requirements.txt
 └── README.md
 ```
@@ -125,14 +124,18 @@ print(results_df)
 # Generate all 6 paper plots → results/plots/
 # (trajectories dict must be collected during evaluate_all — see evaluate.py)
 ```
-
 ## Running Tests
 
 ```bash
 # Requires data/indices/ to be built first
 pytest tests/test_env.py -v
 ```
+## GUI
+```bash
+# generates a streamlit UI
+streamlit run gui/app.py
 
+```
 ## Key Design Decisions
 
 | Decision | Rationale |
