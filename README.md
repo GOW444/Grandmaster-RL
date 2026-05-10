@@ -5,7 +5,7 @@
 
 ## Overview
 
-Grandmaster-RL trains a reinforcement learning agent to construct personalized chess puzzle curricula for simulated learners. Rather than the standard "rating-match" heuristic used by platforms like Lichess and Chess.com — where a player simply receives the next puzzle within ±Δ of their current rating — this system models the learner as a Markov Decision Process and optimizes long-term skill gain using PPO and SAC.
+Grandmaster-RL trains a reinforcement learning agent to construct personalized chess puzzle curricula for simulated learners. Rather than the standard "rating-match" heuristic used by platforms like Lichess and Chess.com — where a player simply receives the next puzzle within ±Δ of their current rating — this system models the learner as a Markov Decision Process and optimizes long-term skill gain using PPO, with SAC included as a comparison method.
 
 The agent selects a tactical theme (`fork`, `pin`, `mate`, `endgame`, `skewer`, `discovery`) and a target difficulty rating at each step. A logistic IRT model simulates whether the learner solves the puzzle, and their per-theme skill estimates are updated accordingly. The primary metric is the **Learning Efficiency Index (LEI)**, which jointly measures rating gain, success rate, and difficulty consistency. Robustness is assessed by evaluating trained policies on a held-out environment that injects learner fatigue and IRT temperature jitter — dynamics never seen during training.
 
@@ -22,11 +22,10 @@ Grandmaster-RL/
 │   └── learner_model.py    # IRT logistic model + skill update
 ├── gui/
 │   ├── app.py              # Streamlit Interactive Dashboard
-│ 
 ├── agents/
 │   └── baselines.py        # Random, RatingMatch, FixedProgression
 ├── networks/
-│   └── hybrid_policy.py    # Custom SB3 ActorCriticPolicy (hybrid head)
+│   └── hybrid_policy.py    # Custom PPO ActorCriticPolicy (hybrid head)
 ├── training/
 │   ├── train_ppo.py
 │   ├── train_sac.py
@@ -36,6 +35,8 @@ Grandmaster-RL/
 │   └── visualize.py        # All 6 publication plots
 ├── scripts/
 │   └── build_dataset.py    # Phase 1: filter CSV + build KD-tree indices
+├── tests/
+│   └── test_env.py         # Environment and baseline sanity tests
 ├── requirements.txt
 └── README.md
 ```
@@ -81,6 +82,8 @@ python training/train_ppo.py \
 
 ### SAC
 
+SAC uses Stable-Baselines3's standard continuous `MlpPolicy`. The environment exposes the theme as a continuous float and rounds it to the nearest theme at step time, so SAC is a useful continuous-control comparison but PPO is the recommended model for the hybrid action structure.
+
 ```bash
 python training/train_sac.py \
     --config training/configs/sac.yaml \
@@ -89,7 +92,7 @@ python training/train_sac.py \
     --output_dir checkpoints/sac
 ```
 
-Checkpoints are saved every 10% of total timesteps. The best model (by training-env episodic reward) is saved to `checkpoints/{algo}/best_model/`. TensorBoard logs go to `checkpoints/{algo}/tensorboard/`.
+Checkpoints are saved every 10% of total timesteps. PPO also saves a callback best model in `checkpoints/ppo/best_model/`. TensorBoard logs go to `checkpoints/{algo}/tensorboard/`.
 
 ```bash
 tensorboard --logdir checkpoints/
@@ -105,7 +108,6 @@ from env.chess_env import ChessPuzzleEnv
 from env.eval_env import EvalChessPuzzleEnv
 from agents.baselines import RandomAgent, RatingMatchAgent, FixedProgressionAgent
 from evaluation.evaluate import evaluate_all
-from evaluation.visualize import plot_all
 
 train_env = ChessPuzzleEnv()
 eval_env  = EvalChessPuzzleEnv()
@@ -121,21 +123,35 @@ models = {
 results_df = evaluate_all(models, train_env, eval_env, n_episodes=50)
 print(results_df)
 
-# Generate all 6 paper plots → results/plots/
-# (trajectories dict must be collected during evaluate_all — see evaluate.py)
 ```
+
+The Streamlit dashboard can run the same multi-agent evaluation and generate all six publication plots under `results/plots/`.
+
 ## Running Tests
 
 ```bash
 # Requires data/indices/ to be built first
 pytest tests/test_env.py -v
 ```
+
 ## GUI
 ```bash
-# generates a streamlit UI
+# Launches the Streamlit dashboard
 streamlit run gui/app.py
-
 ```
+
+## Final Results
+
+| Agent | LEI Eval | Robustness | Mean Δρ Eval | Success Eval |
+|---|---:|---:|---:|---:|
+| PPO | 0.0016 | 0.6674 | 4.63 | 0.697 |
+| SAC | 0.0005 | 0.4077 | 11.34 | 0.133 |
+| Random | 0.0000 | 0.6413 | 2.57 | 0.233 |
+| RatingMatch | 0.0012 | 0.6667 | 6.48 | 0.419 |
+| FixedProgression | 0.0013 | 0.7149 | 5.57 | 0.536 |
+
+PPO is the recommended final policy because it achieves the strongest evaluation LEI while maintaining a high held-out success rate.
+
 ## Key Design Decisions
 
 | Decision | Rationale |
