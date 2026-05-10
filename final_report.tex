@@ -82,7 +82,10 @@ possible to optimize cumulative learning rather than immediate puzzle matching a
 We use a reduced version of the open-source Lichess puzzle database. Each puzzle
 contains a FEN position, solution moves, Glicko-2 puzzle rating, rating deviation, and
 space-separated theme tags. We filter the dataset to keep puzzles with rating
-deviation at most 150 and rating in $[400,3000]$.
+deviation at most 150 and rating in $[400,3000]$. The prepared dataset files are
+available at
+\href{https://drive.google.com/drive/folders/1AXQDvtR4Y1rbuMHVfYMX1FZpv5W6oESB}
+{\texttt{Google Drive dataset folder}}.
 
 Each puzzle is assigned to one primary tactical theme:
 \[
@@ -330,6 +333,11 @@ platform baselines.
 The complete implementation is available at:
 \[
 \href{https://github.com/GOW444/Grandmaster-RL}{\texttt{github.com/GOW444/Grandmaster-RL}}.
+\]
+The dataset used for preprocessing and training is available at:
+\[
+\href{https://drive.google.com/drive/folders/1AXQDvtR4Y1rbuMHVfYMX1FZpv5W6oESB}
+{\texttt{drive.google.com/drive/folders/1AXQDvtR4Y1rbuMHVfYMX1FZpv5W6oESB}}.
 \]
 
 \begin{thebibliography}{9}
