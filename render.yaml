@@ -1,0 +1,20 @@
+# Render Blueprint: FastAPI backend on the free web-service tier (512 MB, sleeps after 15 min idle).
+# Postgres lives on Neon (free, doesn't expire); set DATABASE_URL in the Render dashboard.
+services:
+  - type: web
+    name: grandmaster-rl-api
+    runtime: python
+    plan: free
+    rootDir: backend
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /api/health
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.12.7
+      - key: DATABASE_URL
+        sync: false
+      - key: JWT_SECRET
+        generateValue: true
+      - key: CORS_ORIGINS
+        value: '["https://grandmaster-rl.vercel.app"]'

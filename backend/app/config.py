@@ -1,6 +1,7 @@
 from functools import lru_cache
 from pathlib import Path
 
+from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 BACKEND_DIR = Path(__file__).resolve().parents[1]
@@ -17,9 +18,19 @@ class Settings(BaseSettings):
     cors_origins: list[str] = ["http://localhost:5173"]
 
     # RL engine artifacts (from the `engine` branch, used read-only)
+    policy_npz: Path = BACKEND_DIR / "app" / "assets" / "ppo_policy.npz"  # torch-free export (preferred)
     ppo_checkpoint: Path = REPO_ROOT / "checkpoints" / "ppo" / "ppo_final.zip"
     ppo_vecnormalize: Path = REPO_ROOT / "checkpoints" / "ppo" / "vec_normalize.pkl"
     coach_use_vecnormalize: bool = False  # matches how the reported results were evaluated
+
+    @field_validator("database_url")
+    @classmethod
+    def _psycopg_driver(cls, v: str) -> str:
+        # Hosted Postgres (Neon, Render, Supabase) hands out postgres:// or postgresql:// URLs.
+        for prefix in ("postgres://", "postgresql://"):
+            if v.startswith(prefix):
+                return "postgresql+psycopg://" + v[len(prefix):]
+        return v
 
 
 @lru_cache

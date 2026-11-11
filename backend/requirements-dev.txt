@@ -1,0 +1,6 @@
+# Dev / tests / data import / policy export: runtime + RL engine
+-r requirements.txt
+-r ../requirements.txt
+zstandard>=0.23
+httpx>=0.27
+pytest>=8

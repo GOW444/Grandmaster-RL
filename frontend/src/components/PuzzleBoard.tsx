@@ -2,6 +2,7 @@ import { Chess, type Square } from 'chess.js'
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 import { Chessboard } from 'react-chessboard'
 import type { Puzzle } from '../api'
+import { play as sfx, playMove } from '../sounds'
 
 export type BoardStatus = 'intro' | 'playing' | 'solved' | 'failed'
 
@@ -45,6 +46,7 @@ export default function PuzzleBoard({ puzzle, onFinish, hintSignal = 0, showSolu
 
   const play = useCallback((uci: string) => {
     const m = game.current.move(uciParts(uci))
+    playMove(m)
     setFen(game.current.fen())
     setLast({ from: m.from, to: m.to })
   }, [])
@@ -75,6 +77,7 @@ export default function PuzzleBoard({ puzzle, onFinish, hintSignal = 0, showSolu
   }, [status, hints, toMove, onStatus])
 
   const finish = (solved: boolean) => {
+    window.setTimeout(() => sfx(solved ? 'success' : 'fail'), 150)
     setStatus(solved ? 'solved' : 'failed')
     onFinish?.(solved, Math.round(performance.now() - startedAt.current), hints)
   }
@@ -89,6 +92,7 @@ export default function PuzzleBoard({ puzzle, onFinish, hintSignal = 0, showSolu
       return false
     }
     setSelected(null)
+    playMove(m)
     const expected = puzzle.moves[idx]
     const uci = m.from + m.to + (m.promotion ?? '')
     // Lichess accepts any mating move as correct, even if it differs from the stored line.
@@ -113,7 +117,10 @@ export default function PuzzleBoard({ puzzle, onFinish, hintSignal = 0, showSolu
 
   // Hints: 1st highlights the piece to move, 2nd shows the full move as an arrow.
   useEffect(() => {
-    if (hintSignal > 0 && status === 'playing') setHints((h) => Math.min(h + 1, 2))
+    if (hintSignal > 0 && status === 'playing') {
+      sfx('hint')
+      setHints((h) => Math.min(h + 1, 2))
+    }
   }, [hintSignal]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // After a miss: rewind to before the wrong move and animate the rest of the line.

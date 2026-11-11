@@ -43,7 +43,7 @@ psql -U postgres -c "CREATE ROLE grandmaster LOGIN PASSWORD 'grandmaster';"     
 
 # 1. Python env (engine + backend)
 python -m venv .venv && source .venv/bin/activate        # Windows: .venv\Scripts\activate
-pip install -r backend/requirements.txt
+pip install -r backend/requirements-dev.txt
 
 # 2. Puzzles: official Lichess dump (~310 MB) -> ~200k puzzles stratified over themes x ratings
 mkdir -p data/raw && curl -o data/raw/lichess_db_puzzle.csv.zst https://database.lichess.org/lichess_db_puzzle.csv.zst

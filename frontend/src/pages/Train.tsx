@@ -3,6 +3,7 @@ import { useSearchParams } from 'react-router-dom'
 import { api, THEMES, type AttemptResult, type NextPuzzle, type Theme } from '../api'
 import { useAuth } from '../auth'
 import PuzzleBoard, { type BoardStatus } from '../components/PuzzleBoard'
+import { play as sfx } from '../sounds'
 
 type Mode = 'coach' | 'rated' | 'theme' | 'daily' | 'review'
 
@@ -86,6 +87,7 @@ export default function Train() {
         selector: data.selector,
       })
       setResult(r)
+      if (r.new_badges.length) window.setTimeout(() => sfx('badge'), 700)
       refresh()
     } catch (e) {
       setError((e as Error).message)

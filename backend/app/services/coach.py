@@ -21,6 +21,7 @@ import numpy as np
 
 from app.config import REPO_ROOT, get_settings
 from app.models import THEMES
+from app.services.policy import NumpyPolicy
 
 log = logging.getLogger(__name__)
 
@@ -71,18 +72,23 @@ class PPOCoach:
         self.error: str | None = None
 
     def load(self) -> None:
+        """Prefer the torch-free NumPy export; fall back to the SB3 checkpoint if it's missing."""
         s = get_settings()
-        if str(REPO_ROOT) not in sys.path:
-            sys.path.insert(0, str(REPO_ROOT))  # so the custom HybridPolicy unpickles
         try:
-            from stable_baselines3 import PPO
+            if s.policy_npz.exists():
+                self._model = NumpyPolicy(s.policy_npz)
+                log.info("PPO coach loaded (numpy) from %s", s.policy_npz)
+            else:
+                if str(REPO_ROOT) not in sys.path:
+                    sys.path.insert(0, str(REPO_ROOT))  # so the custom HybridPolicy unpickles
+                from stable_baselines3 import PPO
 
-            self._model = PPO.load(str(s.ppo_checkpoint), device="cpu")
+                self._model = PPO.load(str(s.ppo_checkpoint), device="cpu")
+                log.info("PPO coach loaded (SB3) from %s", s.ppo_checkpoint)
             if s.coach_use_vecnormalize and s.ppo_vecnormalize.exists():
                 with open(s.ppo_vecnormalize, "rb") as fh:
                     self._obs_rms = pickle.load(fh).obs_rms
             self.available = True
-            log.info("PPO coach loaded from %s", s.ppo_checkpoint)
         except Exception as exc:  # pragma: no cover - depends on local artifacts
             self.error = f"{type(exc).__name__}: {exc}"
             log.warning("PPO coach unavailable, falling back to rating-match: %s", self.error)
@@ -90,6 +96,8 @@ class PPOCoach:
     def _predict(self, obs: np.ndarray) -> np.ndarray:
         if self._obs_rms is not None:
             obs = np.clip((obs - self._obs_rms.mean) / np.sqrt(self._obs_rms.var + 1e-8), -10, 10).astype(np.float32)
+        if isinstance(self._model, NumpyPolicy):
+            return self._model.act(obs)
         with self._lock:
             action, _ = self._model.predict(obs, deterministic=True)
         return np.asarray(action, dtype=np.float32).ravel()

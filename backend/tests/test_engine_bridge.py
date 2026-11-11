@@ -44,3 +44,19 @@ def test_empty_history_matches_env_reset_state():
 def test_skill_model_uses_engine_irt_curve():
     for phi, delta in [(1000, 1000), (1200, 900), (800, 1700)]:
         assert abs(expected_score(phi, delta) - solve_prob(phi, delta)) < 1e-12
+
+
+def test_numpy_policy_matches_sb3_checkpoint():
+    from stable_baselines3 import PPO
+
+    from app.config import get_settings
+    from app.services.policy import NumpyPolicy
+
+    s = get_settings()
+    model = PPO.load(str(s.ppo_checkpoint), device="cpu")
+    pol = NumpyPolicy(s.policy_npz)
+    obs = np.random.default_rng(1).uniform(0, 1, size=(2000, 9)).astype(np.float32)
+    ref, _ = model.predict(obs, deterministic=True)
+    ours = np.stack([pol.act(o) for o in obs])
+    assert np.array_equal(ref[:, 0], ours[:, 0])
+    assert np.max(np.abs(ref[:, 1] - ours[:, 1])) < 1e-5

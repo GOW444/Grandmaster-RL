@@ -1,5 +1,7 @@
+import { useState } from 'react'
 import { NavLink, Outlet } from 'react-router-dom'
 import { useAuth } from '../auth'
+import { sound } from '../sounds'
 
 const links = [
   { to: '/', label: 'Dashboard' },
@@ -12,6 +14,7 @@ const links = [
 
 export default function Layout() {
   const { user, logout } = useAuth()
+  const [muted, setMuted] = useState(sound.isMuted())
   return (
     <div className="min-h-screen flex flex-col">
       <header className="border-b border-ink-800 bg-ink-900/80 backdrop-blur sticky top-0 z-20">
@@ -40,6 +43,17 @@ export default function Layout() {
           </nav>
           {user && (
             <div className="ml-auto flex items-center gap-4 text-sm shrink-0">
+              <button
+                onClick={() => {
+                  sound.setMuted(!muted)
+                  setMuted(!muted)
+                }}
+                className="text-ink-500 hover:text-ink-100"
+                title={muted ? 'Unmute sounds' : 'Mute sounds'}
+                aria-label={muted ? 'Unmute sounds' : 'Mute sounds'}
+              >
+                {muted ? '🔇' : '🔊'}
+              </button>
               <span className="hidden sm:inline text-gold" title="Daily streak">
                 🔥 {user.current_streak}
               </span>
