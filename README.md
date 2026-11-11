@@ -1,5 +1,72 @@
 # Grandmaster-RL
 
+> **RL-powered chess tactics trainer** — a full-stack puzzle platform whose AI coach is a PPO curriculum policy.
+> Started as a DSAI course project at IIIT Bangalore (the RL engine, preserved on the [`engine`](../../tree/engine) branch) and extended into a web app.
+
+## The platform
+
+| | |
+|---|---|
+| **Train** | Real Lichess puzzles on an interactive board (drag or click, promotion, hints, show-solution, alternate mates accepted). Modes: AI Coach, Rated, Theme drill, Daily, Review-your-misses. |
+| **AI Coach** | The trained PPO policy runs on a real user's state (6 theme ratings + last-10 results) and picks theme + difficulty. A/B mode randomly assigns each puzzle to PPO or a Lichess-style rating-match baseline and logs outcomes, so the simulated-learner result can be checked on real people (**Coach Lab** page). |
+| **Stats** | Per-theme ratings (radar), rating history, accuracy & avg time per theme, accuracy-vs-time-spent, activity heatmap, auto-detected areas to improve. |
+| **Gamification** | XP & levels, daily streaks, 9 badges, leaderboard (rating / XP / streak). |
+| **Library** | Save puzzles, browse full attempt history, replay any puzzle. |
+
+**Stack:** FastAPI · SQLAlchemy 2 · PostgreSQL · JWT auth (bcrypt) · Stable-Baselines3 (inference only) · React 19 + TypeScript · Vite · Tailwind v4 · react-chessboard + chess.js · Recharts · pytest · Playwright (e2e smoke).
+
+### How the RL engine plugs in
+
+```
+user's DB rows ──► [overall, 6 theme ratings, rolling success, rolling difficulty] ──► PPO (engine checkpoint)
+                    (identical to env/chess_env.py::_build_state — enforced by a test)      │
+                                                                                            ▼
+             Postgres B-tree on (primary_theme, rating)  ◄── nearest unseen puzzle ── (theme, target rating)
+             (replaces the engine's per-theme KD-tree)
+```
+
+- Ratings use the engine's own IRT curve `P(solve) = σ((φ − δ)/200)` as the expected score, with an Elo-style K-factor update (the engine's α=0.05 rule is tuned for 100-step simulated episodes and is far too slow for humans).
+- Only a user's first attempt at a puzzle is rated; hints count as a miss for rating purposes.
+- No retraining: `checkpoints/ppo/ppo_final.zip` is loaded read-only.
+
+### Data model
+
+`users` · `theme_skills (user, theme → rating, attempts, solved, time)` · `puzzles (Lichess id, FEN, UCI moves, rating, themes[], primary_theme)` · `attempts (user, puzzle, mode, selector, solved, time_ms, hints, rating before/after, xp)` · `saved_puzzles` · `user_badges`
+
+### Run it locally
+
+Prereqs: Python 3.11+, Node 20+, PostgreSQL 15+.
+
+```bash
+# 0. Postgres
+psql -U postgres -c "CREATE ROLE grandmaster LOGIN PASSWORD 'grandmaster';"                  -c "CREATE DATABASE grandmaster OWNER grandmaster;"
+
+# 1. Python env (engine + backend)
+python -m venv .venv && source .venv/bin/activate        # Windows: .venv\Scripts\activate
+pip install -r backend/requirements.txt
+
+# 2. Puzzles: official Lichess dump (~310 MB) -> ~200k puzzles stratified over themes x ratings
+mkdir -p data/raw && curl -o data/raw/lichess_db_puzzle.csv.zst https://database.lichess.org/lichess_db_puzzle.csv.zst
+cd backend && python scripts/import_puzzles.py --src ../data/raw/lichess_db_puzzle.csv.zst --per-theme 40000
+
+# 3. API  (http://localhost:8000/docs)
+cp .env.example .env   # set JWT_SECRET
+uvicorn app.main:app --reload
+
+# 4. Web app (http://localhost:5173)
+cd ../frontend && npm install && npm run dev
+```
+
+Tests: `cd backend && pytest` (needs a `grandmaster_test` database).
+
+### Reproducing the engine's reported results
+
+`python scripts/verify_results.py` re-runs the seeded evaluation from the saved checkpoints (after `scripts/build_dataset.py`). On the November 2026 Lichess dump, PPO and SAC match `FINAL_REPORT.md` exactly; baseline agents differ slightly because their internal RNG state depended on run order in the original GUI session. The report's table corresponds to **20** episodes (the Streamlit default), not 50.
+
+---
+
+# RL engine (original project)
+
 > **RL-Based Adaptive Chess Puzzle Training System**
 > DSAI Project — IIIT Bangalore
 

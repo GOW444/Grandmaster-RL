@@ -1,0 +1,48 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --color-ink-950: #0d1117;
+  --color-ink-900: #141a22;
+  --color-ink-800: #1c2430;
+  --color-ink-700: #2a3443;
+  --color-ink-500: #6b7a90;
+  --color-ink-300: #aab6c8;
+  --color-ink-100: #e6ebf2;
+  --color-brand: #7fa650;
+  --color-brand-dim: #5d7d38;
+  --color-gold: #e3b341;
+  --color-bad: #e5534b;
+}
+
+html,
+body,
+#root {
+  min-height: 100%;
+}
+
+body {
+  @apply bg-ink-950 text-ink-100 font-sans antialiased;
+}
+
+@utility card {
+  @apply bg-ink-900 border border-ink-800 rounded-xl;
+}
+
+@utility btn {
+  @apply inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold transition-colors disabled:opacity-50 disabled:cursor-not-allowed;
+}
+@utility btn-primary {
+  @apply btn bg-brand text-ink-950 hover:bg-[#8fb860];
+}
+@utility btn-ghost {
+  @apply btn bg-ink-800 text-ink-100 hover:bg-ink-700;
+}
+
+@utility input {
+  @apply w-full rounded-lg bg-ink-950 border border-ink-700 px-3 py-2 text-sm outline-none focus:border-brand;
+}
+
+@utility label {
+  @apply text-xs uppercase tracking-wider text-ink-500 font-semibold;
+}

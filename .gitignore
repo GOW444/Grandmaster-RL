@@ -215,3 +215,8 @@ cython_debug/
 marimo/_static/
 marimo/_lsp/
 __marimo__/
+
+# Platform (web app)
+node_modules/
+frontend/dist/
+*.tsbuildinfo
