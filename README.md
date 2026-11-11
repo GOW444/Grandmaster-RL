@@ -10,6 +10,8 @@
 | **Train** | Real Lichess puzzles on an interactive board (drag or click, promotion, hints, show-solution, alternate mates accepted). Modes: AI Coach, Rated, Theme drill, Daily, Review-your-misses. |
 | **AI Coach** | The trained PPO policy runs on a real user's state (6 theme ratings + last-10 results) and picks theme + difficulty. A/B mode randomly assigns each puzzle to PPO or a Lichess-style rating-match baseline and logs outcomes, so the simulated-learner result can be checked on real people (**Coach Lab** page). |
 | **Stats** | Per-theme ratings (radar), rating history, accuracy & avg time per theme, accuracy-vs-time-spent, activity heatmap, auto-detected areas to improve. |
+| **Puzzle Battle** | Timed (3/5 min), 3-strike puzzle races on an escalating ladder: solo rush, private rooms with a join code / invite link (up to 8), or quick-match a random player. Live standings via polling; answers are re-validated server-side with python-chess so scores can't be forged. |
+| **Custom training** | Pick any rating range (+ optional theme) and train inside it, or browse/filter the catalogue (rating, theme, solved/missed/unseen, popularity) and play a specific puzzle. |
 | **Gamification** | XP & levels, daily streaks, 9 badges, leaderboard (rating / XP / streak). |
 | **Library** | Save puzzles, browse full attempt history, replay any puzzle. |
 
@@ -31,7 +33,7 @@ user's DB rows ──► [overall, 6 theme ratings, rolling success, rolling dif
 
 ### Data model
 
-`users` · `theme_skills (user, theme → rating, attempts, solved, time)` · `puzzles (Lichess id, FEN, UCI moves, rating, themes[], primary_theme)` · `attempts (user, puzzle, mode, selector, solved, time_ms, hints, rating before/after, xp)` · `saved_puzzles` · `user_badges`
+`users` · `races` / `race_players` · `theme_skills (user, theme → rating, attempts, solved, time)` · `puzzles (Lichess id, FEN, UCI moves, rating, themes[], primary_theme)` · `attempts (user, puzzle, mode, selector, solved, time_ms, hints, rating before/after, xp)` · `saved_puzzles` · `user_badges`
 
 ### Run it locally
 

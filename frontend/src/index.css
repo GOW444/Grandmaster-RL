@@ -43,6 +43,37 @@ body {
   @apply w-full rounded-lg bg-ink-950 border border-ink-700 px-3 py-2 text-sm outline-none focus:border-brand;
 }
 
+/* Dual-thumb range slider: two overlaid native inputs, only the thumbs take pointer events. */
+.range-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  background: transparent;
+  pointer-events: none;
+}
+.range-thumb::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  pointer-events: auto;
+  width: 18px;
+  height: 18px;
+  border-radius: 9999px;
+  background: var(--color-ink-100);
+  border: 3px solid var(--color-brand);
+  cursor: pointer;
+}
+.range-thumb::-moz-range-thumb {
+  pointer-events: auto;
+  width: 14px;
+  height: 14px;
+  border-radius: 9999px;
+  background: var(--color-ink-100);
+  border: 3px solid var(--color-brand);
+  cursor: pointer;
+}
+.range-thumb::-webkit-slider-runnable-track,
+.range-thumb::-moz-range-track {
+  background: transparent;
+}
+
 @utility label {
   @apply text-xs uppercase tracking-wider text-ink-500 font-semibold;
 }

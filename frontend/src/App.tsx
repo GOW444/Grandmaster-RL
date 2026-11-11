@@ -3,6 +3,8 @@ import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
 import { AuthProvider, useAuth } from './auth'
 import Layout from './components/Layout'
 import AuthPage from './pages/AuthPage'
+import { BattleJoin, BattleLobby, BattleRoom } from './pages/Battle'
+import Browse from './pages/Browse'
 import CoachLab from './pages/CoachLab'
 import Dashboard from './pages/Dashboard'
 import History from './pages/History'
@@ -32,6 +34,10 @@ export default function App() {
           <Route element={<RequireAuth><Layout /></RequireAuth>}>
             <Route index element={<Dashboard />} />
             <Route path="train" element={<Train />} />
+            <Route path="battle" element={<BattleLobby />} />
+            <Route path="battle/join/:code" element={<BattleJoin />} />
+            <Route path="battle/:id" element={<BattleRoom />} />
+            <Route path="browse" element={<Browse />} />
             <Route path="saved" element={<Saved />} />
             <Route path="history" element={<History />} />
             <Route path="leaderboard" element={<Leaderboard />} />

@@ -116,6 +116,43 @@ class SavedPuzzle(Base):
     puzzle: Mapped[Puzzle] = relationship()
 
 
+class Race(Base):
+    """A Puzzle Battle: everyone gets the same escalating puzzle ladder, fixed time, limited strikes."""
+
+    __tablename__ = "races"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    code: Mapped[str] = mapped_column(String(8), unique=True, index=True)
+    host_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
+    visibility: Mapped[str] = mapped_column(String(8))  # solo | private | public
+    status: Mapped[str] = mapped_column(String(10), default="waiting", index=True)  # waiting | running | finished
+    duration_s: Mapped[int] = mapped_column(Integer)
+    max_errors: Mapped[int] = mapped_column(Integer, default=3)
+    puzzle_ids: Mapped[list[str]] = mapped_column(ARRAY(String))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    players: Mapped[list["RacePlayer"]] = relationship(
+        back_populates="race", cascade="all, delete-orphan", order_by="RacePlayer.joined_at"
+    )
+
+
+class RacePlayer(Base):
+    __tablename__ = "race_players"
+
+    race_id: Mapped[int] = mapped_column(ForeignKey("races.id", ondelete="CASCADE"), primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), primary_key=True, index=True)
+    score: Mapped[int] = mapped_column(Integer, default=0)
+    errors: Mapped[int] = mapped_column(Integer, default=0)
+    current_index: Mapped[int] = mapped_column(Integer, default=0)
+    best_rating: Mapped[int] = mapped_column(Integer, default=0)  # hardest puzzle solved
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    joined_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    race: Mapped[Race] = relationship(back_populates="players")
+    user: Mapped[User] = relationship()
+
+
 class UserBadge(Base):
     __tablename__ = "user_badges"
 

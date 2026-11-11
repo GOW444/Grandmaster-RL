@@ -39,14 +39,19 @@ def _coach_state(db: Session, user: User) -> CoachState:
 
 @router.get("/next", response_model=NextPuzzleOut)
 def next_puzzle(
-    mode: str = Query("coach", pattern=r"^(coach|rated|theme)$"),
+    mode: str = Query("coach", pattern=r"^(coach|rated|theme|custom)$"),
     theme: str | None = Query(None),
     selector: str | None = Query(None, pattern=r"^(ppo|rating_match|ab)$"),
+    min_rating: int = Query(400, ge=400, le=3000),
+    max_rating: int = Query(3000, ge=400, le=3000),
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> NextPuzzleOut:
     """coach: AI-selected (PPO, or rating-match baseline; `ab` = random 50/50 split).
-    rated: your overall rating, any theme. theme: drill one theme at your level."""
+    rated: your overall rating, any theme. theme: drill one theme at your level.
+    custom: random unseen puzzle in [min_rating, max_rating], optionally one theme."""
+    if mode == "custom":
+        return _custom(db, user, min_rating, max_rating, theme)
     state = _coach_state(db, user)
     reason, sel, target, pick_theme = None, None, user.rating, None
 
@@ -73,6 +78,77 @@ def next_puzzle(
         puzzle=puzzle_out(puzzle), mode=mode, selector=sel, target_rating=target,
         reason=reason, saved=_is_saved(db, user.id, puzzle.id),
     )
+
+
+def _custom(db: Session, user: User, lo: int, hi: int, theme: str | None) -> NextPuzzleOut:
+    if lo > hi:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "min_rating must be <= max_rating")
+    if theme is not None and theme not in THEMES:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, f"theme must be one of {THEMES}")
+    # Random point in the range, then the nearest unseen puzzle that is still inside the range.
+    puzzle = None
+    for _ in range(3):
+        cand = nearest_puzzle(db, user.id, float(_rng.uniform(lo, hi)), theme)
+        if cand and lo <= cand.rating <= hi:
+            puzzle = cand
+            break
+    if puzzle is None:
+        q = select(Puzzle).where(Puzzle.rating.between(lo, hi), _unseen_by(user.id))
+        if theme:
+            q = q.where(Puzzle.primary_theme == theme)
+        puzzle = db.scalar(q.limit(1))
+    if puzzle is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "No unseen puzzles in that range")
+    label = f"{theme} " if theme else ""
+    return NextPuzzleOut(puzzle=puzzle_out(puzzle), mode="custom", reason=f"Custom: {label}{lo}–{hi}",
+                         saved=_is_saved(db, user.id, puzzle.id))
+
+
+def _unseen_by(user_id: int):
+    return ~exists().where(Attempt.user_id == user_id, Attempt.puzzle_id == Puzzle.id)
+
+
+@router.get("/browse")
+def browse(
+    min_rating: int = Query(400, ge=400, le=3000),
+    max_rating: int = Query(3000, ge=400, le=3000),
+    theme: str | None = Query(None),
+    status_filter: str = Query("all", alias="status", pattern=r"^(all|unseen|solved|failed)$"),
+    sort: str = Query("rating", pattern=r"^(rating|-rating|popular)$"),
+    page: int = Query(1, ge=1, le=500),
+    page_size: int = Query(24, ge=1, le=60),
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> dict:
+    """Filterable, paginated puzzle catalogue with the user's own status per puzzle."""
+    q = select(Puzzle).where(Puzzle.rating.between(min_rating, max_rating))
+    if theme:
+        q = q.where(Puzzle.primary_theme == theme)
+    mine = select(Attempt.puzzle_id).where(Attempt.user_id == user.id)
+    if status_filter == "unseen":
+        q = q.where(_unseen_by(user.id))
+    elif status_filter == "solved":
+        q = q.where(Puzzle.id.in_(mine.where(Attempt.solved)))
+    elif status_filter == "failed":
+        q = q.where(Puzzle.id.in_(mine.where(~Attempt.solved)), Puzzle.id.not_in(mine.where(Attempt.solved)))
+    order = {"rating": (Puzzle.rating, Puzzle.id), "-rating": (Puzzle.rating.desc(), Puzzle.id),
+             "popular": (Puzzle.popularity.desc(), Puzzle.nb_plays.desc(), Puzzle.id)}[sort]
+    total = db.scalar(select(func.count()).select_from(q.subquery())) or 0
+    rows = db.scalars(q.order_by(*order).offset((page - 1) * page_size).limit(page_size)).all()
+
+    ids = [p.id for p in rows]
+    solved_ids = set(db.scalars(mine.where(Attempt.puzzle_id.in_(ids), Attempt.solved)).all()) if ids else set()
+    tried_ids = set(db.scalars(mine.where(Attempt.puzzle_id.in_(ids))).all()) if ids else set()
+    return {
+        "total": total,
+        "page": page,
+        "page_size": page_size,
+        "items": [
+            {**puzzle_out(p).model_dump(), "popularity": p.popularity, "nb_plays": p.nb_plays,
+             "status": "solved" if p.id in solved_ids else "failed" if p.id in tried_ids else "unseen"}
+            for p in rows
+        ],
+    }
 
 
 @router.get("/daily", response_model=NextPuzzleOut)

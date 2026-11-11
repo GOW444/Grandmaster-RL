@@ -5,7 +5,8 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import get_settings
-from app.routers import attempts, auth, puzzles, stats
+from app.db import Base, engine
+from app.routers import attempts, auth, puzzles, races, stats
 from app.services.coach import coach
 
 logging.basicConfig(level=logging.INFO)
@@ -13,6 +14,7 @@ logging.basicConfig(level=logging.INFO)
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
+    Base.metadata.create_all(engine)  # idempotent; adds new tables (e.g. races) to existing DBs
     coach.load()
     yield
 
@@ -25,7 +27,7 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-for r in (auth.router, puzzles.router, attempts.router, stats.router):
+for r in (auth.router, puzzles.router, attempts.router, stats.router, races.router):
     app.include_router(r)
 
 

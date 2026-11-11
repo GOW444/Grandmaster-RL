@@ -6,10 +6,12 @@ import { sound } from '../sounds'
 const links = [
   { to: '/', label: 'Dashboard' },
   { to: '/train', label: 'Train' },
+  { to: '/battle', label: '⚔️ Battle' },
+  { to: '/browse', label: 'Browse' },
   { to: '/saved', label: 'Saved' },
   { to: '/history', label: 'History' },
-  { to: '/leaderboard', label: 'Leaderboard' },
-  { to: '/coach', label: 'Coach Lab' },
+  { to: '/leaderboard', label: 'Ranks' },
+  { to: '/coach', label: '🤖 Coach Lab' },
 ]
 
 export default function Layout() {
@@ -18,7 +20,7 @@ export default function Layout() {
   return (
     <div className="min-h-screen flex flex-col">
       <header className="border-b border-ink-800 bg-ink-900/80 backdrop-blur sticky top-0 z-20">
-        <div className="max-w-6xl mx-auto px-4 py-2 md:h-14 md:py-0 flex flex-wrap md:flex-nowrap items-center gap-x-6 gap-y-2">
+        <div className="max-w-6xl mx-auto px-4 py-2 md:h-14 md:py-0 flex flex-wrap md:flex-nowrap items-center gap-x-4 gap-y-2">
           <NavLink to="/" className="flex items-center gap-2 font-bold text-lg shrink-0">
             <span className="text-2xl">♞</span>
             <span>
@@ -32,7 +34,7 @@ export default function Layout() {
                 to={l.to}
                 end={l.to === '/'}
                 className={({ isActive }) =>
-                  `px-3 py-1.5 rounded-md text-sm whitespace-nowrap ${
+                  `px-2.5 py-1.5 rounded-md text-sm whitespace-nowrap ${
                     isActive ? 'bg-ink-800 text-ink-100' : 'text-ink-300 hover:text-ink-100'
                   }`
                 }
@@ -57,7 +59,7 @@ export default function Layout() {
               <span className="hidden sm:inline text-gold" title="Daily streak">
                 🔥 {user.current_streak}
               </span>
-              <span className="hidden sm:inline text-ink-300">
+              <span className="hidden xl:inline text-ink-300">
                 <span className="font-semibold text-ink-100">{Math.round(user.rating)}</span> · Lv {user.level}
               </span>
               <button onClick={logout} className="text-ink-500 hover:text-ink-100">

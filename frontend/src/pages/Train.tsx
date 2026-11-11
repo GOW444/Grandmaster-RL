@@ -3,14 +3,16 @@ import { useSearchParams } from 'react-router-dom'
 import { api, THEMES, type AttemptResult, type NextPuzzle, type Theme } from '../api'
 import { useAuth } from '../auth'
 import PuzzleBoard, { type BoardStatus } from '../components/PuzzleBoard'
+import RatingRange from '../components/RatingRange'
 import { play as sfx } from '../sounds'
 
-type Mode = 'coach' | 'rated' | 'theme' | 'daily' | 'review'
+type Mode = 'coach' | 'rated' | 'theme' | 'custom' | 'daily' | 'review'
 
 const MODES: { id: Mode; label: string; desc: string }[] = [
   { id: 'coach', label: '🤖 AI Coach', desc: 'RL policy picks theme + difficulty' },
   { id: 'rated', label: '⚖️ Rated', desc: 'Any theme at your rating' },
   { id: 'theme', label: '🎯 Theme drill', desc: 'Focus on one motif' },
+  { id: 'custom', label: '🎚️ Custom', desc: 'Your rating range' },
   { id: 'daily', label: '📅 Daily', desc: 'Same puzzle for everyone' },
   { id: 'review', label: '🔁 Review', desc: 'Puzzles you missed' },
 ]
@@ -25,6 +27,9 @@ export default function Train() {
   const theme = (params.get('theme') as Theme) || 'fork'
   const selector = params.get('selector') || 'ab'
   const replayId = params.get('puzzle')
+  const rMin = Number(params.get('min') ?? 1200)
+  const rMax = Number(params.get('max') ?? 1600)
+  const cTheme = (params.get('theme') as Theme) || undefined
 
   const [data, setData] = useState<NextPuzzle | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -48,13 +53,14 @@ export default function Train() {
       if (replayId) d = await api.puzzle(replayId)
       else if (mode === 'daily') d = await api.daily()
       else if (mode === 'review') d = await api.review()
+      else if (mode === 'custom') d = await api.next('custom', { min: rMin, max: rMax, theme: cTheme })
       else d = await api.next(mode, { theme: mode === 'theme' ? theme : undefined, selector: mode === 'coach' ? selector : undefined })
       setData(d)
       setSaved(d.saved)
     } catch (e) {
       setError((e as Error).message)
     }
-  }, [mode, theme, selector, replayId])
+  }, [mode, theme, selector, replayId, rMin, rMax, cTheme])
 
   useEffect(() => {
     load()
@@ -83,7 +89,7 @@ export default function Train() {
         solved,
         time_ms: timeMs,
         hints_used: hintsUsed,
-        mode: replayId ? 'review' : mode,
+        mode: replayId ? 'rated' : mode, // server only rates a user's first attempt at a puzzle
         selector: data.selector,
       })
       setResult(r)
@@ -101,7 +107,18 @@ export default function Train() {
     setSaved(!saved)
   }
 
-  const setMode = (m: Mode) => setParams(m === 'theme' ? { mode: m, theme } : m === 'coach' ? { mode: m, selector } : { mode: m })
+  const setMode = (m: Mode) =>
+    setParams(
+      m === 'theme' ? { mode: m, theme } : m === 'coach' ? { mode: m, selector } : m === 'custom' ? { mode: m, min: String(rMin), max: String(rMax) } : { mode: m },
+    )
+  const setCustom = (patch: Record<string, string>) => {
+    const next = new URLSearchParams({ mode: 'custom', min: String(rMin), max: String(rMax), ...(cTheme ? { theme: cTheme } : {}) })
+    for (const [k, v] of Object.entries(patch)) {
+      if (v) next.set(k, v)
+      else next.delete(k)
+    }
+    setParams(next)
+  }
   const done = status === 'solved' || status === 'failed'
 
   return (
@@ -134,6 +151,27 @@ export default function Train() {
               {t}
             </button>
           ))}
+        </div>
+      )}
+      {mode === 'custom' && !replayId && (
+        <div className="card p-4 grid md:grid-cols-[1.4fr_1fr] gap-5">
+          <RatingRange min={rMin} max={rMax} onChange={(lo, hi) => setCustom({ min: String(lo), max: String(hi) })} />
+          <div className="space-y-2">
+            <div className="label">Theme</div>
+            <div className="flex flex-wrap gap-2">
+              {['', ...THEMES].map((t) => (
+                <button
+                  key={t || 'any'}
+                  onClick={() => setCustom({ theme: t })}
+                  className={`px-3 py-1 rounded-full text-sm capitalize ${
+                    (cTheme ?? '') === t ? 'bg-brand text-ink-950 font-semibold' : 'bg-ink-800 text-ink-300'
+                  }`}
+                >
+                  {t || 'Any'}
+                </button>
+              ))}
+            </div>
+          </div>
         </div>
       )}
       {mode === 'coach' && !replayId && (

@@ -1,15 +1,7 @@
-import { Chess } from 'chess.js'
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { Chessboard } from 'react-chessboard'
-import { api, type Puzzle } from '../api'
-
-function startPosition(p: Puzzle) {
-  const g = new Chess(p.fen)
-  const m = p.moves[0]
-  g.move({ from: m.slice(0, 2), to: m.slice(2, 4), promotion: m[4] })
-  return { fen: g.fen(), orientation: (g.turn() === 'w' ? 'white' : 'black') as 'white' | 'black' }
-}
+import { api } from '../api'
+import MiniBoard from '../components/MiniBoard'
 
 export default function Saved() {
   const [items, setItems] = useState<Awaited<ReturnType<typeof api.saved>> | null>(null)
@@ -34,19 +26,10 @@ export default function Saved() {
       )}
       <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {items.map(({ puzzle, created_at }) => {
-          const { fen, orientation } = startPosition(puzzle)
           return (
             <div key={puzzle.id} className="card p-3 space-y-2">
               <Link to={`/train?puzzle=${puzzle.id}`} className="block">
-                <Chessboard
-                  id={`saved-${puzzle.id}`}
-                  position={fen}
-                  boardOrientation={orientation}
-                  arePiecesDraggable={false}
-                  customDarkSquareStyle={{ backgroundColor: '#769656' }}
-                  customLightSquareStyle={{ backgroundColor: '#eeeed2' }}
-                  customBoardStyle={{ borderRadius: '6px' }}
-                />
+                <MiniBoard puzzle={puzzle} />
               </Link>
               <div className="flex items-center justify-between text-sm">
                 <div>

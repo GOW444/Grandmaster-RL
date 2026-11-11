@@ -8,7 +8,8 @@ export type BoardStatus = 'intro' | 'playing' | 'solved' | 'failed'
 
 interface Props {
   puzzle: Puzzle
-  onFinish?: (solved: boolean, timeMs: number, hints: number) => void
+  onFinish?: (solved: boolean, timeMs: number, hints: number, played: string[]) => void
+  introMs?: number // delay before the opponent's setup move
   hintSignal?: number // increment to request a hint
   showSolutionSignal?: number // increment to animate the remaining solution
   onStatus?: (s: BoardStatus, info: { hints: number; toMove: 'white' | 'black' }) => void
@@ -26,7 +27,8 @@ const uciParts = (uci: string) => ({
   promotion: uci.length > 4 ? uci[4] : undefined,
 })
 
-export default function PuzzleBoard({ puzzle, onFinish, hintSignal = 0, showSolutionSignal = 0, onStatus }: Props) {
+export default function PuzzleBoard({ puzzle, onFinish, hintSignal = 0, showSolutionSignal = 0, onStatus, introMs = 600 }: Props) {
+  const played = useRef<string[]>([])
   const game = useRef(new Chess(puzzle.fen))
   const [fen, setFen] = useState(puzzle.fen)
   const [idx, setIdx] = useState(0) // index of the next expected move in puzzle.moves
@@ -63,14 +65,15 @@ export default function PuzzleBoard({ puzzle, onFinish, hintSignal = 0, showSolu
     setSelected(null)
     setHints(0)
     failedAtFen.current = null
+    played.current = []
     later(() => {
       play(puzzle.moves[0])
       setIdx(1)
       setStatus('playing')
       startedAt.current = performance.now()
-    }, 600)
+    }, introMs)
     return () => timers.current.forEach(clearTimeout)
-  }, [puzzle, play])
+  }, [puzzle, play]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     onStatus?.(status, { hints, toMove })
@@ -79,7 +82,7 @@ export default function PuzzleBoard({ puzzle, onFinish, hintSignal = 0, showSolu
   const finish = (solved: boolean) => {
     window.setTimeout(() => sfx(solved ? 'success' : 'fail'), 150)
     setStatus(solved ? 'solved' : 'failed')
-    onFinish?.(solved, Math.round(performance.now() - startedAt.current), hints)
+    onFinish?.(solved, Math.round(performance.now() - startedAt.current), hints, [...played.current])
   }
 
   const tryMove = (from: Square, to: Square, promotion?: string): boolean => {
@@ -95,6 +98,7 @@ export default function PuzzleBoard({ puzzle, onFinish, hintSignal = 0, showSolu
     playMove(m)
     const expected = puzzle.moves[idx]
     const uci = m.from + m.to + (m.promotion ?? '')
+    played.current.push(uci)
     // Lichess accepts any mating move as correct, even if it differs from the stored line.
     const correct = uci === expected || game.current.isCheckmate()
     setFen(game.current.fen())

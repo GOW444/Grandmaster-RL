@@ -92,6 +92,38 @@ export interface AttemptRow {
   created_at: string
 }
 
+export interface BrowseItem extends Puzzle {
+  popularity: number
+  nb_plays: number
+  status: 'unseen' | 'solved' | 'failed'
+}
+
+export interface RacePlayerState {
+  username: string
+  score: number
+  errors: number
+  best_rating: number
+  finished: boolean
+  you: boolean
+}
+
+export interface RaceState {
+  id: number
+  code: string
+  visibility: 'solo' | 'private' | 'public'
+  status: 'waiting' | 'running' | 'finished'
+  duration_s: number
+  max_errors: number
+  host: string | null
+  is_host: boolean
+  server_now: string
+  started_at: string | null
+  ends_at: string | null
+  players: RacePlayerState[]
+  me: { score: number; errors: number; index: number; finished: boolean } | null
+  puzzle?: Puzzle
+}
+
 const TOKEN_KEY = 'gmrl_token'
 
 export const tokenStore = {
@@ -155,11 +187,45 @@ export const api = {
     }),
   me: () => request<User>('/auth/me'),
 
-  next: (mode: 'coach' | 'rated' | 'theme', opts: { theme?: Theme; selector?: string } = {}) => {
+  next: (
+    mode: 'coach' | 'rated' | 'theme' | 'custom',
+    opts: { theme?: Theme; selector?: string; min?: number; max?: number } = {},
+  ) => {
     const q = new URLSearchParams({ mode })
     if (opts.theme) q.set('theme', opts.theme)
     if (opts.selector) q.set('selector', opts.selector)
+    if (opts.min !== undefined) q.set('min_rating', String(opts.min))
+    if (opts.max !== undefined) q.set('max_rating', String(opts.max))
     return request<NextPuzzle>(`/puzzles/next?${q}`)
+  },
+  browse: (f: { min: number; max: number; theme?: string; status: string; sort: string; page: number }) => {
+    const q = new URLSearchParams({
+      min_rating: String(f.min),
+      max_rating: String(f.max),
+      status: f.status,
+      sort: f.sort,
+      page: String(f.page),
+      page_size: '24',
+    })
+    if (f.theme) q.set('theme', f.theme)
+    return request<{ total: number; page: number; page_size: number; items: BrowseItem[] }>(`/puzzles/browse?${q}`)
+  },
+
+  races: {
+    create: (visibility: 'solo' | 'private', duration_s: number) =>
+      request<RaceState>('/races', { method: 'POST', body: json({ visibility, duration_s, max_errors: 3 }) }),
+    quick: (duration_s: number) => request<RaceState>(`/races/quick?duration_s=${duration_s}`, { method: 'POST' }),
+    join: (code: string) => request<RaceState>(`/races/join?code=${encodeURIComponent(code)}`, { method: 'POST' }),
+    get: (id: number) => request<RaceState>(`/races/${id}`),
+    start: (id: number) => request<RaceState>(`/races/${id}/start`, { method: 'POST' }),
+    leave: (id: number) => request<void>(`/races/${id}/leave`, { method: 'POST' }),
+    answer: (id: number, index: number, moves: string[]) =>
+      request<RaceState & { correct: boolean; solution: string[] }>(`/races/${id}/answer`, {
+        method: 'POST',
+        body: json({ index, moves }),
+      }),
+    leaderboard: (duration_s: number) =>
+      request<{ username: string; score: number }[]>(`/races/leaderboard?duration_s=${duration_s}`),
   },
   daily: () => request<NextPuzzle>('/puzzles/daily'),
   review: () => request<NextPuzzle>('/puzzles/review'),
