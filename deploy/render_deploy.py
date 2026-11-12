@@ -7,7 +7,7 @@ import urllib.error
 import urllib.request
 from pathlib import Path
 
-REPO = Path(r"d:\projects\GrandMasterRL\repo")
+REPO = Path(__file__).resolve().parents[1]
 ENV = {}
 for line in (REPO / "deploy.env").read_text(encoding="utf-8").splitlines():
     line = line.strip()

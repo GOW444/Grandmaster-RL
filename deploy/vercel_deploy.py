@@ -8,7 +8,7 @@ import urllib.error
 import urllib.request
 from pathlib import Path
 
-REPO = Path(r"d:\projects\GrandMasterRL\repo")
+REPO = Path(__file__).resolve().parents[1]
 TOKEN = [l.split("=", 1)[1].strip().strip("\"'") for l in (REPO / "deploy.env").read_text(encoding="utf-8").splitlines()
          if l.startswith("VERCEL_TOKEN=")][0]
 NAME = "grandmaster-rl"
