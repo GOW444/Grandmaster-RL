@@ -220,3 +220,7 @@ __marimo__/
 node_modules/
 frontend/dist/
 *.tsbuildinfo
+
+# Deploy secrets (never commit)
+deploy.env
+.neon
