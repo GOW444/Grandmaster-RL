@@ -3,6 +3,9 @@
 > **RL-powered chess tactics trainer** — a full-stack puzzle platform whose AI coach is a PPO curriculum policy.
 > Started as a DSAI course project at IIIT Bangalore (the RL engine, preserved on the [`engine`](../../tree/engine) branch) and extended into a web app.
 
+**🔗 Live demo: https://grandmaster-rl.vercel.app** · API docs: https://grandmaster-rl-api.onrender.com/docs
+<sub>(free tier — the API sleeps after 15 min idle, so the first request can take ~1 min to wake up)</sub>
+
 ## The platform
 
 | | |
@@ -60,6 +63,17 @@ cd ../frontend && npm install && npm run dev
 ```
 
 Tests: `cd backend && pytest` (needs a `grandmaster_test` database).
+
+### Deployment (all free tiers)
+
+| Piece | Host | Notes |
+|---|---|---|
+| Web app | Vercel | static Vite build; `frontend/vercel.json` proxies `/api/*` to Render, so no CORS |
+| API | Render (free, Singapore) | `render.yaml`; no torch at runtime — PPO runs as a 243 KB NumPy export (`scripts/export_policy.py`, parity-tested) |
+| Database | Neon Postgres 17 (Singapore) | seeded with `backend/scripts/copy_puzzles.py` (resumable batches) |
+
+Secrets live in an untracked `deploy.env` (`NEON_DATABASE_URL`, `RENDER_API_KEY`, `VERCEL_TOKEN`).
+Redeploy: `python deploy/render_deploy.py redeploy` · `cd frontend && npm run build && python ../deploy/vercel_deploy.py`
 
 ### Reproducing the engine's reported results
 

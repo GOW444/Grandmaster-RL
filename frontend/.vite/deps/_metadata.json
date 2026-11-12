@@ -1,0 +1,55 @@
+{
+  "hash": "78b6fb9a",
+  "configHash": "8bf922c6",
+  "lockfileHash": "0ef293b7",
+  "browserHash": "55482e3b",
+  "optimized": {
+    "chess.js": {
+      "src": "../../node_modules/chess.js/dist/esm/chess.js",
+      "file": "chess__js.js",
+      "fileHash": "fcb08d5f",
+      "needsInterop": false
+    },
+    "react": {
+      "src": "../../node_modules/react/index.js",
+      "file": "react.js",
+      "fileHash": "3401855e",
+      "needsInterop": true
+    },
+    "react-chessboard": {
+      "src": "../../node_modules/react-chessboard/dist/index.esm.js",
+      "file": "react-chessboard.js",
+      "fileHash": "142fb3c0",
+      "needsInterop": false
+    },
+    "react-dom/client": {
+      "src": "../../node_modules/react-dom/client.js",
+      "file": "react-dom_client.js",
+      "fileHash": "238f3104",
+      "needsInterop": true
+    },
+    "react-router-dom": {
+      "src": "../../node_modules/react-router-dom/dist/index.mjs",
+      "file": "react-router-dom.js",
+      "fileHash": "70a6d00f",
+      "needsInterop": false
+    },
+    "recharts": {
+      "src": "../../node_modules/recharts/es6/index.js",
+      "file": "recharts.js",
+      "fileHash": "8810842a",
+      "needsInterop": false
+    }
+  },
+  "chunks": {
+    "chunk-4YFKHVIQ": {
+      "file": "chunk-4YFKHVIQ.js"
+    },
+    "chunk-TLWDJGXO": {
+      "file": "chunk-TLWDJGXO.js"
+    },
+    "chunk-DC5AMYBS": {
+      "file": "chunk-DC5AMYBS.js"
+    }
+  }
+}
